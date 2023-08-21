@@ -1,0 +1,144 @@
+diff --git a/guix/import/go.scm b/guix/import/go.scm
+index 0357e6a1eb..0d032c5a9f 100644
+--- a/guix/import/go.scm
++++ b/guix/import/go.scm
+@@ -115,7 +115,7 @@ (define (go-path-escape path)
+ (define (go.pkg.dev-info name)
+   (http-fetch* (string-append "https://pkg.go.dev/" name)))
+ 
+-(define* (go-module-version-string goproxy name #:key version)
++(define* (go-module-version-string goproxy name #:key version)  ;; Should this be `go-module-latest-version-string` ?
+   "Fetch the version string of the latest version for NAME from the given
+ GOPROXY server, or for VERSION when specified."
+   (let ((file (if version
+@@ -463,7 +463,7 @@ (define-record-type <module-meta>
+   (vcs module-meta-vcs)                 ;a symbol
+   (repo-root module-meta-repo-root))
+ 
+-(define (fetch-module-meta-data module-path)
++(define (fetch-module-meta-data module-path)  ;; Possibly might not be very robust, or needed anymore since the $version.info contains the data
+   "Retrieve the module meta-data from its landing page.  This is necessary
+ because goproxy servers don't currently provide all the information needed to
+ build a package."
+@@ -513,7 +513,7 @@ (define* (git-checkout-hash url reference algorithm)
+                                           `(tag-or-commit . ,reference)))))
+     (file-hash* checkout #:algorithm algorithm #:recursive? #true)))
+ 
+-(define (vcs->origin vcs-type vcs-repo-url version)
++(define (vcs->origin vcs-type vcs-repo-url version vcs-submodule-path)
+   "Generate the `origin' block of a package depending on what type of source
+ control system is being used."
+   (case vcs-type
+@@ -528,13 +528,18 @@ (define (vcs->origin vcs-type vcs-repo-url version)
+                 ;; which the generated quoted expression refers to, has been
+                 ;; stripped of any 'v' prefixed.
+                 (commit ,(if (and plain-version? v-prefixed?)
+-                             '(string-append "v" version)
++                             `(string-append ,(if vcs-submodule-path
++                                                  (string-append vcs-submodule-path "/v")
++                                                  "v")
++                                             version)
+                              '(go-version->git-ref version)))))
+           (file-name (git-file-name name version))
+           (sha256
+            (base32
+             ,(bytevector->nix-base32-string
+-              (git-checkout-hash vcs-repo-url (go-version->git-ref version)
++              (git-checkout-hash vcs-repo-url (if (and plain-version? v-prefixed?)
++                                                  (string-append (if vcs-submodule-path vcs-submodule-path "") "/" version)
++                                                  (go-version->git-ref version))
+                                  (hash-algorithm sha256))))))))
+     ((hg)
+      `(origin
+@@ -610,46 +615,54 @@ (define* (go-module->guix-package module-path #:key
+          (dependencies (if pin-versions?
+                            dependencies+versions
+                            (map car dependencies+versions)))
+-         (module-path-sans-suffix
+-          (match:prefix (string-match "([\\./]v[0-9]+)?$" module-path)))
+-         (guix-name (go-module->guix-package-name module-path))
++         (module-path-sans-suffix (match:prefix (string-match "([\\./]v[0-9]+)?$" module-path)))
++         (guix-name (go-module->guix-package-name module-path))  ;; doesn't work correctly with pin versions eg. "github.com/pierrec/lz4/v4"
+          (root-module-path (module-path->repository-root module-path))
+          ;; The VCS type and URL are not included in goproxy information. For
+          ;; this we need to fetch it from the official module page.
+          (meta-data (fetch-module-meta-data root-module-path))
+          (vcs-type (module-meta-vcs meta-data))
+          (vcs-repo-url (module-meta-data-repo-url meta-data goproxy))
++         (vcs-submodule-path  (if (and (not (string=? (module-meta-import-prefix meta-data)
++                                                      module-path-sans-suffix))
++                                       (string-prefix? (module-meta-import-prefix meta-data)
++                                                       module-path-sans-suffix))
++                                  (substring module-path-sans-suffix
++                                             (+ 1 ;; remove the starting slash
++                                                (string-prefix-length (module-meta-import-prefix meta-data)
++                                                                      module-path-sans-suffix)))
++                                  #f))
+          (synopsis (go-package-synopsis module-path))
+          (description (go-package-description module-path))
+          (licenses (go-package-licenses module-path)))
+     (values
+      `(package
+-        (name ,guix-name)
+-        (version ,(strip-v-prefix version*))
+-        (source
+-         ,(vcs->origin vcs-type vcs-repo-url version*))
+-        (build-system go-build-system)
+-        (arguments
+-         '(#:import-path ,module-path
+-           ,@(if (string=? module-path-sans-suffix root-module-path)
+-                 '()
+-                 `(#:unpack-path ,root-module-path))))
+-        ,@(maybe-propagated-inputs
+-           (map (match-lambda
+-                  ((name version)
+-                   (go-module->guix-package-name name (strip-v-prefix version)))
+-                  (name
+-                   (go-module->guix-package-name name)))
+-                dependencies))
+-        (home-page ,(format #f "https://~a" root-module-path))
+-        (synopsis ,synopsis)
+-        (description ,(and=> description beautify-description))
+-        (license ,(match (list->licenses licenses)
+-                    (() #f)                       ;unknown license
+-                    ((license)                    ;a single license
+-                     license)
+-                    ((license ...)                ;a list of licenses
+-                     `(list ,@license)))))
++       (name ,guix-name)
++       (version ,(strip-v-prefix version*))
++       (source
++        ,(vcs->origin vcs-type vcs-repo-url version* vcs-submodule-path))
++       (build-system go-build-system)
++       (arguments
++        '(#:import-path ,module-path
++          ,@(if (string=? module-path-sans-suffix root-module-path)
++                '()
++                `(#:unpack-path ,root-module-path))))
++       ,@(maybe-propagated-inputs
++          (map (match-lambda
++                 ((name version)
++                  (go-module->guix-package-name name (strip-v-prefix version)))
++                 (name
++                  (go-module->guix-package-name name)))
++               dependencies))
++       (home-page ,(format #f "https://~a" root-module-path))
++       (synopsis ,synopsis)
++       (description ,(and=> description beautify-description))
++       (license ,(match (list->licenses licenses)
++                   (() #f)              ;unknown license
++                   ((license)           ;a single license
++                    license)
++                   ((license ...)       ;a list of licenses
++                    `(list ,@license)))))
+      (if pin-versions?
+          dependencies+versions
+          dependencies))))
+@@ -681,6 +694,7 @@ (define* (go-module-recursive-import package-name
+    #:repo->guix-package
+    (memoize
+     (lambda* (name #:key version repo #:allow-other-keys)
++      (pk (string-append "package[" name "][" version "]"))
+       (receive (package-sexp dependencies)
+           (go-module->guix-package* name #:goproxy goproxy
+                                     #:version version
