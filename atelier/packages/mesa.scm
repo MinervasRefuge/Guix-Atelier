@@ -41,7 +41,6 @@
 (define-public mesa-with-i915
   (package
    (inherit mesa)
-   (name "mesa-with-i915")
    (arguments
     (list
      #:configure-flags
