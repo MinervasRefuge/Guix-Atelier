@@ -13,6 +13,11 @@
   #:use-module (gnu packages glib)
   #:use-module (gnu packages kde-frameworks)
   #:use-module (gnu packages freedesktop)
+  #:use-module (gnu packages audio)
+  #:use-module (gnu packages pulseaudio)
+  #:use-module (gnu packages image)
+  #:use-module (gnu packages compression)
+  #:use-module (gnu packages linux)
   #:use-module ((guix licenses) #:prefix license:))
 
 (define-public duckstation
@@ -24,20 +29,34 @@
             (uri (git-reference
                   (url "https://github.com/stenzek/duckstation")
                   (commit (string-append "v" version))))
-            (sha256 (base32 "090lwnzc2jllqpzyy7skd6lna7d53vdi37wd2nhnh4dh2j5szrph"))))
-   (inputs (list
-            pkg-config
-            extra-cmake-modules
-            qtbase
-            qttools
-            qtsvg
-            dbus
-            curl
-            sdl2
-            wayland
-            qtwayland
-            libbacktrace
-            libxrandr))
+            (sha256 (base32 "090lwnzc2jllqpzyy7skd6lna7d53vdi37wd2nhnh4dh2j5szrph"))
+            (modules '((guix build utils)))
+            (snippet '(lambda _
+                        (delete-file-recursively "dep")
+                        (substitube* "CMakeLists.txt"
+                                     ("add_subdirectory(dep)")
+                                     "")))))
+   (inputs `(,extra-cmake-modules
+             ,qtbase
+             ,qttools
+             ,qtsvg
+             ,dbus
+             ,curl
+             ,sdl2
+             ,cubeb
+             ,pulseaudio
+             ,zstd
+             ,libwebp
+             ,zlib
+             ,libpng
+             ,libjpeg-turbo
+             ,wayland
+             ,qtwayland
+             ,eudev
+             ,libbacktrace
+             ,libxrandr))
+   (native-inputs
+    (list pkg-config))
    (build-system cmake-build-system)
    (arguments (list
                #:phases
