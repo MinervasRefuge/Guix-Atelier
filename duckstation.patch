@@ -1,0 +1,261 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 47d00879..73a24ba1 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -32,7 +32,7 @@ if(NOT ANDROID)
+   option(BUILD_TESTS "Build unit tests" OFF)
+ 
+   set(ENABLE_CUBEB ON)
+-  set(ENABLE_DISCORD_PRESENCE ON)
++  set(ENABLE_DISCORD_PRESENCE OFF)
+   set(ENABLE_SDL2 ON)
+ 
+   if(LINUX OR FREEBSD)
+@@ -59,7 +59,7 @@ if(NOT WIN32 AND NOT ANDROID)
+   endif()
+ endif()
+ if(BUILD_QT_FRONTEND)
+-  find_package(Qt6 6.5.3 COMPONENTS Core Gui Widgets Network LinguistTools REQUIRED)
++  find_package(Qt6 6.5.2 COMPONENTS Core Gui Widgets Network LinguistTools REQUIRED)
+ endif()
+ 
+ 
+diff --git a/dep/CMakeLists.txt b/dep/CMakeLists.txt
+index 527cac29..83db4bd1 100644
+--- a/dep/CMakeLists.txt
++++ b/dep/CMakeLists.txt
+@@ -5,39 +5,40 @@ add_subdirectory(stb EXCLUDE_FROM_ALL)
+ disable_compiler_warnings_for_target(stb)
+ add_subdirectory(zlib EXCLUDE_FROM_ALL)
+ disable_compiler_warnings_for_target(zlib)
+-add_subdirectory(zstd EXCLUDE_FROM_ALL)
+-disable_compiler_warnings_for_target(zstd)
+-add_subdirectory(minizip EXCLUDE_FROM_ALL)
+-disable_compiler_warnings_for_target(minizip)
++#add_subdirectory(zstd EXCLUDE_FROM_ALL)
++#disable_compiler_warnings_for_target(zstd)
++#add_subdirectory(minizip EXCLUDE_FROM_ALL)
++#disable_compiler_warnings_for_target(minizip)
+ add_subdirectory(lzma EXCLUDE_FROM_ALL)
+ disable_compiler_warnings_for_target(lzma)
+ add_subdirectory(libchdr EXCLUDE_FROM_ALL)
+ disable_compiler_warnings_for_target(libchdr)
+-add_subdirectory(xxhash EXCLUDE_FROM_ALL)
+-disable_compiler_warnings_for_target(xxhash)
+-add_subdirectory(rapidjson EXCLUDE_FROM_ALL)
++#add_subdirectory(xxhash EXCLUDE_FROM_ALL)
++#disable_compiler_warnings_for_target(xxhash)
++#add_subdirectory(rapidjson EXCLUDE_FROM_ALL)
+ add_subdirectory(glslang EXCLUDE_FROM_ALL)
+ disable_compiler_warnings_for_target(glslang)
+ add_subdirectory(imgui EXCLUDE_FROM_ALL)
+ disable_compiler_warnings_for_target(imgui)
+-add_subdirectory(simpleini EXCLUDE_FROM_ALL)
+-disable_compiler_warnings_for_target(simpleini)
++#add_subdirectory(simpleini EXCLUDE_FROM_ALL)
++#disable_compiler_warnings_for_target(simpleini)
+ add_subdirectory(vulkan EXCLUDE_FROM_ALL)
+ add_subdirectory(soundtouch EXCLUDE_FROM_ALL)
+ disable_compiler_warnings_for_target(soundtouch)
+ add_subdirectory(googletest EXCLUDE_FROM_ALL)
+-add_subdirectory(cpuinfo EXCLUDE_FROM_ALL)
+-disable_compiler_warnings_for_target(cpuinfo)
+-add_subdirectory(fast_float EXCLUDE_FROM_ALL)
++#add_subdirectory(cpuinfo EXCLUDE_FROM_ALL)
++#disable_compiler_warnings_for_target(cpuinfo)
++#add_subdirectory(fast_float EXCLUDE_FROM_ALL)
+ add_subdirectory(reshadefx EXCLUDE_FROM_ALL)
+ disable_compiler_warnings_for_target(reshadefx)
+ add_subdirectory(rcheevos EXCLUDE_FROM_ALL)
+ disable_compiler_warnings_for_target(rcheevos)
+ 
+ if(ENABLE_CUBEB)
+-  add_subdirectory(cubeb EXCLUDE_FROM_ALL)
+-  disable_compiler_warnings_for_target(cubeb)
+-  disable_compiler_warnings_for_target(speex)
++	#  add_subdirectory(cubeb EXCLUDE_FROM_ALL)
++	#  disable_compiler_warnings_for_target(cubeb)
++	#  disable_compiler_warnings_for_target(speex)
++	find_package(cubeb REQUIRED NAMES cubeb)
+ endif()
+ 
+ if(ENABLE_OPENGL)
+@@ -51,9 +52,15 @@ if(ENABLE_DISCORD_PRESENCE)
+ endif()
+ 
+ if(CPU_ARCH_X64)
+-  add_subdirectory(xbyak EXCLUDE_FROM_ALL)
+-  add_subdirectory(zydis EXCLUDE_FROM_ALL)
+-  disable_compiler_warnings_for_target(zydis)
++  add_library(xbyak INTERFACE)
++  target_compile_definitions(xbyak INTERFACE "XBYAK_NO_EXCEPTION=1")
++  #find_package(xbyak REQUIRED NAMES xbyak)
++  #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DXBYAK_NO_EXCEPTION=1")
++  #add_definitions("XBYAK_NO_EXCEPTION=1")
++  #add_subdirectory(xbyak EXCLUDE_FROM_ALL)
++  #add_subdirectory(zydis EXCLUDE_FROM_ALL)
++  #disable_compiler_warnings_for_target(zydis)
++  find_package(zydis REQUIRED)
+ endif()
+ 
+ if(CPU_ARCH_ARM32 OR CPU_ARCH_ARM64)
+@@ -78,3 +85,14 @@ if(APPLE)
+   add_subdirectory(spirv-cross EXCLUDE_FROM_ALL)
+   disable_compiler_warnings_for_target(spirv-cross)
+ endif()
++
++# Guix Patches
++find_package(fast_float REQUIRED NAMES FastFloat)
++find_package(rapidjson REQUIRED NAMES RapidJSON)
++pkg_search_module(zstd REQUIRED libzstd)
++pkg_search_module(minizip REQUIRED minizip)
++#find_library(zlib REQUIRED NAMES z)
++#find_library(imgui REQUIRED NAMES imgui)
++add_library(simpleini INTERFACE)
++target_compile_definitions(simpleini INTERFACE "SI_CONVERT_ICU=ON")
++pkg_search_module(icu-uc REQUIRED icu-uc)
+diff --git a/src/common/CMakeLists.txt b/src/common/CMakeLists.txt
+index 9c7f5915..b3882f87 100644
+--- a/src/common/CMakeLists.txt
++++ b/src/common/CMakeLists.txt
+@@ -60,8 +60,8 @@ add_library(common
+ 
+ target_include_directories(common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
+ target_include_directories(common PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
+-target_link_libraries(common PUBLIC fmt Threads::Threads fast_float)
+-target_link_libraries(common PRIVATE stb zlib minizip Zstd::Zstd "${CMAKE_DL_LIBS}")
++target_link_libraries(common PUBLIC fmt Threads::Threads)
++target_link_libraries(common PRIVATE stb zlib minizip "${CMAKE_DL_LIBS}")
+ 
+ if(WIN32)
+   target_sources(common PRIVATE
+diff --git a/src/common/minizip_helpers.cpp b/src/common/minizip_helpers.cpp
+index f093fbba..202b1751 100644
+--- a/src/common/minizip_helpers.cpp
++++ b/src/common/minizip_helpers.cpp
+@@ -3,7 +3,7 @@
+ 
+ #include "minizip_helpers.h"
+ #include "file_system.h"
+-#include "ioapi.h"
++#include "minizip/ioapi.h"
+ #include "types.h"
+ #include <algorithm>
+ 
+@@ -90,4 +90,4 @@ unzFile OpenUnzFile(const char* filename)
+   return unzOpen2_64(filename, &funcs);
+ }
+ 
+-} // namespace MinizipHelpers
+\ No newline at end of file
++} // namespace MinizipHelpers
+diff --git a/src/common/minizip_helpers.h b/src/common/minizip_helpers.h
+index a010bea7..5298b267 100644
+--- a/src/common/minizip_helpers.h
++++ b/src/common/minizip_helpers.h
+@@ -2,11 +2,11 @@
+ // SPDX-License-Identifier: (GPL-3.0 OR CC-BY-NC-ND-4.0)
+ 
+ #pragma once
+-#include "unzip.h"
++#include "minizip/unzip.h"
+ 
+ namespace MinizipHelpers {
+ 
+ unzFile OpenUnzMemoryFile(const void* memory, size_t memory_size);
+ unzFile OpenUnzFile(const char* filename);
+ 
+-} // namespace MinizipHelpers
+\ No newline at end of file
++} // namespace MinizipHelpers
+diff --git a/src/core/CMakeLists.txt b/src/core/CMakeLists.txt
+index 4d60f8e0..c994da0a 100644
+--- a/src/core/CMakeLists.txt
++++ b/src/core/CMakeLists.txt
+@@ -131,7 +131,7 @@ target_precompile_headers(core PRIVATE "pch.h")
+ target_include_directories(core PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
+ target_include_directories(core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
+ target_link_libraries(core PUBLIC Threads::Threads common util zlib)
+-target_link_libraries(core PRIVATE stb xxhash imgui rapidjson rcheevos)
++target_link_libraries(core PRIVATE stb xxhash imgui rcheevos)
+ 
+ if(CPU_ARCH_X64)
+   target_compile_definitions(core PUBLIC "ENABLE_RECOMPILER=1" "ENABLE_NEWREC=1" "ENABLE_MMAP_FASTMEM=1")
+diff --git a/src/core/cpu_recompiler_types.h b/src/core/cpu_recompiler_types.h
+index a58a70ab..ba4c7951 100644
+--- a/src/core/cpu_recompiler_types.h
++++ b/src/core/cpu_recompiler_types.h
+@@ -16,7 +16,7 @@
+ #endif
+ 
+ #define XBYAK_NO_OP_NAMES 1
+-#include "xbyak.h"
++#include "xbyak/xbyak.h"
+ 
+ namespace CPU::Recompiler {
+ 
+diff --git a/src/duckstation-qt/autoupdaterdialog.cpp b/src/duckstation-qt/autoupdaterdialog.cpp
+index 367bab29..597147c8 100644
+--- a/src/duckstation-qt/autoupdaterdialog.cpp
++++ b/src/duckstation-qt/autoupdaterdialog.cpp
+@@ -7,7 +7,7 @@
+ #include "qtprogresscallback.h"
+ #include "qtutils.h"
+ #include "scmversion/scmversion.h"
+-#include "unzip.h"
++#include "minizip/unzip.h"
+ 
+ #include "util/http_downloader.h"
+ 
+diff --git a/src/updater/CMakeLists.txt b/src/updater/CMakeLists.txt
+index 438a9da1..7de63c8d 100644
+--- a/src/updater/CMakeLists.txt
++++ b/src/updater/CMakeLists.txt
+@@ -3,7 +3,7 @@ add_executable(updater
+   updater.h
+ )
+ 
+-target_link_libraries(updater PRIVATE common minizip zlib)
++target_link_libraries(updater PRIVATE common zlib)
+ 
+ if(WIN32)
+   target_sources(updater PRIVATE
+diff --git a/src/updater/updater.h b/src/updater/updater.h
+index 3aed0ac5..0330677b 100644
+--- a/src/updater/updater.h
++++ b/src/updater/updater.h
+@@ -3,7 +3,7 @@
+ 
+ #pragma once
+ #include "common/progress_callback.h"
+-#include "unzip.h"
++#include "minizip/unzip.h"
+ #include <string>
+ #include <vector>
+ 
+diff --git a/src/util/CMakeLists.txt b/src/util/CMakeLists.txt
+index 35c765fa..27cecb30 100644
+--- a/src/util/CMakeLists.txt
++++ b/src/util/CMakeLists.txt
+@@ -73,7 +73,7 @@ target_precompile_headers(util PRIVATE "pch.h")
+ target_include_directories(util PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
+ target_include_directories(util PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
+ target_link_libraries(util PUBLIC common simpleini imgui)
+-target_link_libraries(util PRIVATE stb libchdr zlib soundtouch xxhash Zstd::Zstd reshadefx)
++target_link_libraries(util PRIVATE stb libchdr zlib soundtouch xxhash zstd reshadefx)
+ 
+ if(ENABLE_CUBEB)
+   target_sources(util PRIVATE
+diff --git a/src/util/ini_settings_interface.h b/src/util/ini_settings_interface.h
+index 8aa178db..d42397a1 100644
+--- a/src/util/ini_settings_interface.h
++++ b/src/util/ini_settings_interface.h
+@@ -8,7 +8,7 @@
+ #ifdef _WIN32
+ #include "common/windows_headers.h"
+ #endif
+-#include "SimpleIni.h"
++#include "SimpleIni/SimpleIni.h"
+ 
+ class INISettingsInterface final : public SettingsInterface
+ {
