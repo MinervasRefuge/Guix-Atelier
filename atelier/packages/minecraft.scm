@@ -86,6 +86,7 @@
                                                 `("LD_LIBRARY_PATH" prefix ,(map (λ (pkg-path) (string-append pkg-path "/lib"))
                                                                                  '(#$mesa
                                                                                    #$libx11
+                                                                                   #$libxcursor
                                                                                    ;;#$glfw-3.4
                                                                                    #$openal)))
                                                 `("PRISMLAUNCHER_JAVA_PATHS" = (,(string-append #$openjdk18:jdk "/bin/java")))))))))
@@ -97,6 +98,7 @@
              ,openal
              ,mesa
              ,libx11
+             ,libxcursor
              (,openjdk18 "jdk")))
    (native-inputs `(,extra-cmake-modules))
    (synopsis "Prism Launcher is a custom launcher for Minecraft that allows you to easily manage multiple installations of Minecraft at once.")
