@@ -4,6 +4,8 @@
   #:use-module (guix download)
   #:use-module (guix build-system cmake)
   #:use-module (guix build-system copy)
+  #:use-module (guix build-system scons)
+  #:use-module (guix build-system gnu)
   #:use-module (guix gexp)
   #:use-module (gnu packages)
   #:use-module (gnu packages sdl)
@@ -13,6 +15,7 @@
   #:use-module (gnu packages check)
   #:use-module (gnu packages debug)
   #:use-module (gnu packages xorg)
+  #:use-module (gnu packages xdisorg)
   #:use-module (gnu packages glib)
   #:use-module (gnu packages kde-frameworks)
   #:use-module (gnu packages freedesktop)
@@ -30,8 +33,15 @@
   #:use-module (gnu packages toolkits)
   #:use-module (gnu packages vulkan)
   #:use-module (gnu packages digest)
+  #:use-module (gnu packages llvm)
   #:use-module (gnu packages parallel)
   #:use-module (gnu packages icu4c)
+  #:use-module (gnu packages video)
+  #:use-module (gnu packages libusb)
+  #:use-module (gnu packages serialization)
+  #:use-module (gnu packages tls)
+  #:use-module (gnu packages xml)
+  #:use-module (gnu packages python)
   #:use-module ((guix licenses) #:prefix license:)
   #:use-module (atelier utils)
   #:use-module (ice-9 match))
@@ -581,3 +591,140 @@ A \"BIOS\" ROM image is required to to start the emulator and to play games. You
 ;; if(ENABLE_X11)
 ;;   target_sources(glad PRIVATE src/glad_glx.c)
 ;; endif()
+
+(define-public rpcs3
+  (package
+   (name "RPCS3")
+   (version "0.0.32")
+   (source (origin
+            (method git-fetch)
+            (uri (git-reference
+                  (url "https://github.com/RPCS3/rpcs3")
+                  (commit (string-append "v" version))
+                  (recursive? #t)))
+            (sha256 (base32 "1n26kd6fc6l5msc0g7llgdvk5pcg4zq8mk3jg5kgv272ifljjryp"))
+            (modules '((guix build utils)))
+            (snippet '(begin
+                        ;;(delete-file-recursively "3rdparty")
+                        (for-each (λ (p) (delete-file-recursively (string-append "3rdparty/" p)))
+                                  '(;;"7z"
+                                    ;;"asmjit"
+                                    ;;"cubeb"
+                                    ;;"curl"
+                                    ;;"discord-rpc"
+                                    ;;"FAudio"
+                                    ;;"ffmpeg" could remove with patched 3rdparty/CMakeLists.txt
+                                    ;;"flatbuffers"
+                                    ;;"GL"
+                                    ;;"glslang"
+                                    ;;"GPUOpen"
+                                    ;;"hidapi"
+                                    ;;"libpng"
+                                    ;;"libsdl-org" could remove with patched 3rdparty/CMakeLists.txt
+                                    ;;"libusb"
+                                    ;;"llvm" could remove with patched 3rdparty/CMakeLists.txt
+                                    ;;"miniupnp"
+                                    ;;"MoltenVK"
+                                    ;;"OpenAL"
+                                    ;;"pine"
+                                    ;;"pugixml"
+                                    ;;"robin_hood"
+                                    ;;"rtmidi"
+                                    ;;"SoundTouch"
+                                    ;;"SPIRV"
+                                    ;;"stblib"
+                                    ;;"wolfssl"
+                                    ;;"xxHash"
+                                    ;;"yaml-cpp"
+                                    ;;"zlib"
+                                    ))
+                        ;; Why? 
+                        (substitute* "3rdparty/glslang/glslang/SPIRV/SpvTools.h"
+                                     (("#include \"glslang/MachineIndependent/localintermediate\\.h\"")
+                                      "#include \"../glslang/MachineIndependent/localintermediate.h\""))
+                        (substitute* "3rdparty/glslang/glslang/SPIRV/GlslangToSpv.h"
+                                     (("#include \"glslang/Include/intermediate\\.h\"")
+                                      "#include \"../glslang/Include/intermediate.h\""))))))
+   (build-system cmake-build-system)
+   (arguments (list
+               #:build-type "Debug"
+               #:strip-binaries? #f
+               #:configure-flags '(map (λ (c) (string-append "-D" (car c) "=" (cdr c)))
+                                       '(("USE_SYSTEM_SDL"    . "ON")
+                                         ("USE_SYSTEM_FFMPEG" . "ON")
+                                         
+                                         ;; 3rd party
+                                         ("USE_SYSTEM_FLATBUFFERS" . "ON")
+                                         ("USE_SYSTEM_PUGIXML"     . "ON")
+                                         ("USE_SYSTEM_LIBUSB"      . "ON")
+                                         ("USE_SYSTEM_XXHASH"      . "ON")
+                                         ;;USE_LIBEVDEV   ???
+                                         ("USE_SYSTEM_FAUDIO"      . "ON")
+                                         ;; ("USE_SYSTEM_WOLFSSL"     . "ON")
+                                         ;; ("USE_SYSTEM_CURL"        . "ON")
+                                         ;;built-in curl requires built-in wolfssl
+                                         ("USE_SYSTEM_ZLIB"        . "ON")))
+                #:phases
+                #~(modify-phases %standard-phases
+                                 (delete 'check))))
+   ;;(outputs '("out" "debug"))
+   (inputs (list 
+                 eudev ;;Checking for modules 'libevdev;libudev' No package 'libevdev' found
+                 libevdev ;;? vs eudev
+                 vulkan-validationlayers ;; vulkan might still be missing? Could NOT find Vulkan (missing: Vulkan_LIBRARY) (found version "1.3.280")
+                 vulkan-headers
+                 openal
+                 glew 
+                 qtbase
+                 qtdeclarative
+                 qtmultimedia
+                 qtsvg                 
+                 ;;
+                 ;;mesa 
+                 ;;eglexternalplatform
+                 ;;freeglut
+                 ;;glu ;;based on cmakelist.txt (3dparty)
+                 ;; glad ;; ?
+                 ;;mesa
+                 libglvnd
+                 ;;doxygen?
+                 ;;glslang
+                 
+                 ;;spirv-tools
+                 ;;spirv-headers
+
+                 libxext
+                 libxkbcommon
+                 ;;jack-2
+                 alsa-lib
+
+                 ;;3rd party replacements
+                 llvm-16 ;; They use 16.0.1
+                 libusb
+                 sdl2
+                 flatbuffers
+                 zlib
+                 ffmpeg
+                 ;;wolfssl
+                 xxhash
+                 pugixml
+                ;; curl
+                 faudio
+                 ))
+   (native-inputs (list pkg-config))
+   (propagated-inputs (list qtwayland egl-wayland)) ;; .ci/deploy-linux.sh hints that wayland needs the qt modules for compatibility
+   (synopsis "The world's first free and open-source PlayStation 3 emulator/debugger, written in C++ for Windows, Linux, macOS and FreeBSD.")
+   (description synopsis)
+   (home-page "rpcs3.net")
+   (license #f))) ;; todo fix license
+
+;; Notes
+;; - Force `QT_QPA_PLATFORM=xcb` to deal with warning: qt.qpa.plugin: Could not find the Qt platform plugin "wayland" in ""
+;; - No QtMultimedia backends found. Only QMediaDevices, QAudioDevice, QSoundEffect, QAudioSink, and QAudioSource are available.
+;;   Failed to initialize QMediaPlayer "Not available"
+;; - qt.glx: qglx_findConfig: Failed to finding matching FBConfig for QSurfaceFormat(version 4.3, options QFlags<QSurfaceFormat::FormatOption>(),
+;;   depthBufferSize 0, redBufferSize 1, greenBufferSize 1, blueBufferSize 1, alphaBufferSize -1, stencilBufferSize -1, samples -1, swapBehavior
+;;   QSurfaceFormat::SingleBuffer, swapInterval 1, colorSpace QColorSpace(), profile  QSurfaceFormat::CoreProfile)
+;;   Could not initialize GLX
+
+
