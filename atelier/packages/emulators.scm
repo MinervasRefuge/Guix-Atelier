@@ -1,4 +1,4 @@
-(define-module (atelier packages duckstation)
+(define-module (atelier packages emulators)
   #:use-module (guix packages)
   #:use-module (guix git-download)
   #:use-module (guix download)
