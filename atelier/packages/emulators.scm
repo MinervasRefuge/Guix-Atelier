@@ -84,6 +84,19 @@
 ;; APIs: gl=4.6, gles2=3.2
 ;; Profile: core
 
+(define-public glslang-11.5.0
+  (package
+    (inherit glslang)
+    (version "11.5.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/KhronosGroup/glslang")
+                    (commit version)))
+              (sha256 (base32 "0r2v7j9rjvvq1l43ay2q9gcwxkqx0rsp09swwqjmmmgzh3i39sv5"))))
+    (arguments (cons* #:tests? #f
+                      (package-arguments glslang)))))
+
 ;; imgui notes
 ;; move "/dep/imgui/include/IconsPromptFont.h" where did this file originally come from?
 ;; needs patches to imgui possibly
@@ -179,6 +192,56 @@
 
 ;;     dep: Update RAInterface
 
+(define-public rcheevos-duckstation
+  (package
+   (name "rcheevos-duckstation")
+   (version "11.3.0")
+   (source (origin
+            (method git-fetch)
+            (uri (git-reference
+                  (url "https://github.com/RetroAchievements/rcheevos")
+                  (commit (string-append "v" version))))
+            (sha256 (base32 "01n7ym8phmvhmv37fs8nk0zp0y1jqmsb5ch8r8vw9jvigmjzds83"))
+            (patches (search-patches "rcheevos-duckstation.patch")))) ;; no build files other then what's in test 😦
+   (build-system cmake-build-system)
+   (arguments (list
+               #:phases ;; technically this stuff here should be done by cmake, but my cmake-fu isn't up to scratch
+               #~(modify-phases %standard-phases
+                                (delete 'check)
+                                (replace 'install (lambda _
+                                                    (install-file "librcheevos.a"
+                                                                  (string-append #$output "/lib"))
+                                                    (copy-recursively "../source/include"
+                                                                      (string-append #$output "/include/rcheevos")))))))
+   (home-page "https://github.com/RetroAchievements/rcheevos")
+   (synopsis "rcheevos is a set of C code, or a library if you will, that tries to make it easier for emulators to process RetroAchievements data, providing support for achievements and leaderboards for their players.")
+   (description synopsis)
+   (license license:expat)))
+
+;;todo finish
+(define-public riscv-disassembler
+  (let ((commit "3b1df91f260c7622165ac4e4c486ed5c5509411c"))
+    (package
+     (name "riscv-disassembler")
+     (version (git-version "0" "1" commit))
+     (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/michaeljclark/riscv-disassembler")
+                    (commit commit)))
+              (sha256 (base32 "0ri0453a1lhdmh9xiwd85zbh4arvhd7ll4xq3vzc8zwpyk1r2l8s"))))
+     (build-system cmake-build-system)
+     (arguments (list
+                 #:phases
+                 '(modify-phases %standard-phases
+                                 (replace 'install (λ _
+                                                     ;;todo install
+                                                     )))))
+     (home-page "https://github.com/michaeljclark/riscv-disassembler")
+     (synopsis "RISC-V Disassembler with support for RV32/RV64/RV128 IMAFDC")
+     (description synopsis)
+     (license #f))))
+
 (define-public simpleini
   (package
     (name "simpleini")
@@ -199,10 +262,75 @@
     (description synopsis)
     (license license:expat)))
 
+(define-public soundtouch-static-noexception
+  (package
+    (inherit soundtouch)
+    (name "soundtouch-duckstation")
+    (arguments (list
+                ;; #:make-flags
+                ;; '(list "")
+                #:phases
+                #~(modify-phases %standard-phases
+                    (add-before 'configure 'configure-modification
+                      (lambda _
+                        (substitute* "configure.ac"
+                          (("#AC_DISABLE_SHARED")
+                           "AC_DISABLE_SHARED")
+                          (("AC_DISABLE_STATIC")
+                           "#AC_DISABLE_STATIC")
+                          (("CXXFLAGS=\"-O3 -ffast-math\"")
+                           "CXXFLAGS=\"-O3 -ffast-math -DST_NO_EXCEPTION_HANDLING=1\"")
+                          (("source/SoundStretch/Makefile")
+                           ""))))
+                    (add-after 'install 'define-st-no-exception-handling
+                      (λ _
+                        (substitute* (string-append #$output "/include/soundtouch/soundtouch_config.h")
+                          (("/\\* Use ARM NEON extension \\*/")
+                           "/* Use ARM NEON extension */\n#define ST_NO_EXCEPTION_HANDLING 1"))))
+                    )
+                ))))
+
 (define stb-image-resize
   ((@@ (gnu packages stb) make-stb-header-package)
    "stb-image-resize" "0.96"
    "resize images larger/smaller with good quality"))
+
+;; `vixl@3.0.0: build system `scons' does not support cross builds` Hmn todo finish
+(define-public vixl-3
+  (package
+    (name "vixl")
+    (version "3.0.0")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/Linaro/vixl")
+                    (commit "346e5bddf5051bbdf9982dc2f01c874c94223527"))) ;; need to use the commit rather then the tag since it's broken
+              (sha256 (base32 "1wxmizvb6wms77nnc4i36jxzjq1kq9bzd3lcg7pw2xvg1xaa4xcv"))))
+    (build-system scons-build-system)
+    (home-page "https://github.com/Linaro/vixl")
+    (synopsis "Armv8 Runtime Code Generation Library")
+    (description "VIXL contains three components.
+
+    1. Programmatic assemblers to generate A64, A32 or T32 code at runtime. The assemblers abstract some of the constraints of each ISA; for example, most instructions support any immediate.
+    2. Disassemblers that can print any instruction emitted by the assemblers.
+    3. A simulator that can simulate any instruction emitted by the A64 assembler. The simulator allows generated code to be run on another architecture without the need for a full ISA model.
+")
+    (license #f))) ;; todo fix
+
+(define-public vulkan-headers-duckstation
+  (package
+    (inherit vulkan-headers)
+    (name "vulkan-headers-duckstation")
+    (version "1.3.268")
+    (source (origin
+              (method git-fetch)
+              (uri (git-reference
+                    (url "https://github.com/KhronosGroup/Vulkan-Headers")
+                    (commit (string-append "vulkan-sdk-" version))))
+              (file-name (git-file-name name version))
+              (sha256
+               (base32
+                "06nrl5dx0bcx75qfhbgrhzq1zv6bjpj3dhx287yhhlp7fm6xcf08"))))))
 
 (define-public xbyak
   (package
@@ -293,8 +421,8 @@ The pronunciation of Xbyak is kəi-bja-k. It is named from a Japanese word 開�
                                        "d3d12ma" ;;win32 related
                                        "discord-rpc"
                                        "fast_float"
-                                       ;;"fmt"
-                                       ;;"glad"
+                                       "fmt"
+                                       "glad"
                                        ;;"glslang" ;; fatal error: SPIRV/GlslangToSpv.h: No such file or directory
                                        ;;"googletest"
                                        ;;"imgui" ;;requires patches
@@ -304,7 +432,7 @@ The pronunciation of Xbyak is kəi-bja-k. It is named from a Japanese word 開�
                                        "msvc" ;;win?
                                        ;;"rainterface"
                                        "rapidjson"
-                                       ;;"rcheevos"
+                                       "rcheevos"
                                        ;;"reshadefx"
                                        "riscv-disas" ;;riscv
                                        "simpleini"
@@ -312,7 +440,7 @@ The pronunciation of Xbyak is kəi-bja-k. It is named from a Japanese word 開�
                                        "spirv-cross" ;; apple
                                        ;;todo fix "stb"
                                        "vixl"              ;; arm32/64
-                                       ;;"vulkan"
+                                       "vulkan" ;;vulkan-headers
                                        "winpixeventruntime" ;;win32 related
                                        "xbyak"
                                        "xxhash"
@@ -346,29 +474,34 @@ The pronunciation of Xbyak is kəi-bja-k. It is named from a Japanese word 開�
               ,libxrandr
 
               ;; Patched Deps
-              ;;,soundtouch
               ;;,libchdr
               ,cubeb
-              ;;,fmt
+              ,fmt
               (,zstd "lib")
               ;;,zlib ;;should be minizip?
               ,minizip
               ;;,imgui
-              ;;,glslang
-              ;;,glad-0.1
+              ,spirv-tools
+              ,glslang
+              
               ,xxhash
               ,cpuinfo
               ;;,icon-font-cpp-headers ;;part of imgui?
               ))
     (native-inputs `(,pkg-config
-                     ,icu4c ;; needed for simpleini
+                     ,icu4c    ;; needed for simpleini
+                     ,glad ;; generated code
 
                      ;; Patched Deps
-                     ;;,stb-image-resize
-                     ;;,stb-image-write
-                     ;;,stb-image
+                     ,stb-image-resize
+                     ,stb-image-write
+                     ,stb-image
+                     ,soundtouch-static-noexception
+                     ,rcheevos-duckstation
                      ,simpleini
                      ,fast-float
+                     ,vulkan-memory-allocator
+                     ,vulkan-headers
                      ,rapidjson
                      ;; ,@(match (%current-target-system)
                      ;;     ("x86_64-linux" (list zydis-3 xbyak)))
@@ -381,17 +514,70 @@ The pronunciation of Xbyak is kəi-bja-k. It is named from a Japanese word 開�
                 #:phases
                 #~(modify-phases %standard-phases
                     (delete 'check)
+                    (add-before 'configure 'generate-glad
+                               (λ _
+                                 (define (glad spec api out)
+                                   (invoke "glad"
+                                           "--profile"   "c";;"core"
+                                           "--api"       api ;;"gl=4.6,gles2=3.2" ;;egl=1.5 with --spec egl if egl is enabled and glx=1.4 if x11 is enabled
+                                           ;;"--generator" "c"
+                                           "--spec"      spec
+                                           "--reproducible"
+                                           "--out-path"  out ;;"../glad"
+                                           ))
+                                 (glad "gl"  "gl=4.6,gles2=3.2" "../glad")
+                                 (glad "egl" "egl=1.5"          "../glad-egl")
+                                 (glad "glx" "glx=1.4"          "../glad-glx")
+                                 ;; move the files into the original dir
+                                 (move-file "../glad-egl/src/glad.c"     "../glad/src/glad-egl.c")
+                                 (move-file "../glad-egl/include/glad.h" "../glad/src/glad-egl.h")
+                                 (move-file "../glad-glx/src/glad.c"     "../glad/src/glad-glx.c")
+                                 (move-file "../glad-glx/include/glad.c" "../glad/src/glad-glx.h")
+                                 ;; fix headers
+                                 (substitute* "../glad/src/glad-egl.c"
+                                               (("glad\\.h")
+                                                 "glad-egl.h"))
+                                 (substitute* "../glad/src/glad-glx.c"
+                                               (("glad\\.h")
+                                                 "glad-glx.h"))))
+                    (add-after 'generate-glad 'cmake-glad-patch
+                               (λ _ (display "Asdf")))
                     (replace 'install
-                      (lambda _
-                        (install-file "bin/duckstation-qt"
-                                      (string-append #$output "/bin"))
-                        (copy-recursively "bin/resources"
-                                          (string-append #$output "/bin/resources"))
-                        (copy-recursively "bin/translations"
-                                          (string-append #$output "/bin/translations")))))))
+                             (lambda _
+                               (install-file "bin/duckstation-qt"
+                                             (string-append #$output "/bin"))
+                               (copy-recursively "bin/resources"
+                                                 (string-append #$output "/bin/resources"))
+                               (copy-recursively "bin/translations"
+                                                 (string-append #$output "/bin/translations")))))))
     (home-page "https://github.com/stenzek/duckstation")
     (synopsis "DuckStation is an simulator/emulator of the Sony PlayStation(TM) console, focusing on playability, speed, and long-term maintainability.")
     (description "DuckStation is an simulator/emulator of the Sony PlayStation(TM) console, focusing on playability, speed, and long-term maintainability. The goal is to be as accurate as possible while maintaining performance suitable for low-end devices. \"Hack\" options are discouraged, the default configuration should support all playable games with only some of the enhancements having compatibility issues.
 
 A \"BIOS\" ROM image is required to to start the emulator and to play games. You can use an image from any hardware version or region, although mismatching game regions and BIOS regions may have compatibility issues. A ROM image is not provided with the emulator for legal reasons, you should dump this from your own console using Caetla or other means.")
     (license license:gpl3)))
+
+;; set(SRCS
+;;     ../glad/src/glad.c
+;; )
+
+;; # Linking as a static library breaks on macOS, see https://github.com/libigl/libigl/issues/751
+;; if(APPLE)
+;;   add_library(glad OBJECT ${SRCS})
+;; else()
+;;   add_library(glad ${SRCS})
+;; endif()
+
+;; target_include_directories(glad PRIVATE "../../../glad/include")
+;; target_include_directories(glad PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+;; target_include_directories(glad INTERFACE "../../../glad/include")
+;; target_include_directories(glad INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+;; target_link_libraries(glad PRIVATE Threads::Threads "${CMAKE_DL_LIBS}")
+
+;; if(ENABLE_EGL)
+;;   target_sources(glad PRIVATE src/glad_egl.c)
+;;   target_link_libraries(glad PRIVATE EGL::EGL)
+;; endif()
+;; if(ENABLE_X11)
+;;   target_sources(glad PRIVATE src/glad_glx.c)
+;; endif()

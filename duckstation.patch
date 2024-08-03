@@ -21,10 +21,17 @@ index 47d00879..73a24ba1 100644
  
  
 diff --git a/dep/CMakeLists.txt b/dep/CMakeLists.txt
-index 527cac29..83db4bd1 100644
+index 527cac29..5efb25f5 100644
 --- a/dep/CMakeLists.txt
 +++ b/dep/CMakeLists.txt
-@@ -5,39 +5,40 @@ add_subdirectory(stb EXCLUDE_FROM_ALL)
+@@ -1,43 +1,44 @@
+-set(FMT_INSTALL OFF CACHE BOOL "")
+-add_subdirectory(fmt EXCLUDE_FROM_ALL)
+-disable_compiler_warnings_for_target(fmt)
++#set(FMT_INSTALL OFF CACHE BOOL "")
++#add_subdirectory(fmt EXCLUDE_FROM_ALL)
++#disable_compiler_warnings_for_target(fmt)
+ add_subdirectory(stb EXCLUDE_FROM_ALL)
  disable_compiler_warnings_for_target(stb)
  add_subdirectory(zlib EXCLUDE_FROM_ALL)
  disable_compiler_warnings_for_target(zlib)
@@ -55,8 +62,10 @@ index 527cac29..83db4bd1 100644
 +#add_subdirectory(simpleini EXCLUDE_FROM_ALL)
 +#disable_compiler_warnings_for_target(simpleini)
  add_subdirectory(vulkan EXCLUDE_FROM_ALL)
- add_subdirectory(soundtouch EXCLUDE_FROM_ALL)
- disable_compiler_warnings_for_target(soundtouch)
+-add_subdirectory(soundtouch EXCLUDE_FROM_ALL)
+-disable_compiler_warnings_for_target(soundtouch)
++#add_subdirectory(soundtouch EXCLUDE_FROM_ALL)
++#disable_compiler_warnings_for_target(soundtouch)
  add_subdirectory(googletest EXCLUDE_FROM_ALL)
 -add_subdirectory(cpuinfo EXCLUDE_FROM_ALL)
 -disable_compiler_warnings_for_target(cpuinfo)
@@ -66,8 +75,10 @@ index 527cac29..83db4bd1 100644
 +#add_subdirectory(fast_float EXCLUDE_FROM_ALL)
  add_subdirectory(reshadefx EXCLUDE_FROM_ALL)
  disable_compiler_warnings_for_target(reshadefx)
- add_subdirectory(rcheevos EXCLUDE_FROM_ALL)
- disable_compiler_warnings_for_target(rcheevos)
+-add_subdirectory(rcheevos EXCLUDE_FROM_ALL)
+-disable_compiler_warnings_for_target(rcheevos)
++#add_subdirectory(rcheevos EXCLUDE_FROM_ALL)
++#disable_compiler_warnings_for_target(rcheevos)
  
  if(ENABLE_CUBEB)
 -  add_subdirectory(cubeb EXCLUDE_FROM_ALL)
@@ -99,7 +110,7 @@ index 527cac29..83db4bd1 100644
  endif()
  
  if(CPU_ARCH_ARM32 OR CPU_ARCH_ARM64)
-@@ -78,3 +85,14 @@ if(APPLE)
+@@ -78,3 +85,42 @@ if(APPLE)
    add_subdirectory(spirv-cross EXCLUDE_FROM_ALL)
    disable_compiler_warnings_for_target(spirv-cross)
  endif()
@@ -114,6 +125,34 @@ index 527cac29..83db4bd1 100644
 +add_library(simpleini INTERFACE)
 +target_compile_definitions(simpleini INTERFACE "SI_CONVERT_ICU=ON")
 +pkg_search_module(icu-uc REQUIRED icu-uc)
++#find_package(glslang REQUIRED)
++find_package(fmt REQUIRED)
++
++
++pkg_check_modules(ST_PKG soundtouch)
++add_library(soundtouch STATIC IMPORTED GLOBAL)
++set_target_properties(soundtouch PROPERTIES
++  IMPORTED_LOCATION ${ST_PKG_LINK_LIBRARIES}
++  INTERFACE_INCLUDE_DIRECTORIES ${ST_PKG_INCLUDE_DIRS}
++)
++
++#find_library(SOUNDTOUCH_LIBRARY REQUIRED NAMES SoundTouch)
++#find_path(SOUNDTOUCH_INCLUDE soundtouch/SoundTouch.h)
++
++#add_library(soundtouch STATIC IMPORTED GLOBAL)
++#set_target_properties(soundtouch PROPERTIES
++#  IMPORTED_LOCATION ${SOUNDTOUCH_LIBRARY}
++#  INTERFACE_INCLUDE_DIRECTORIES ${SOUNDTOUCH_INCLUDE}
++#)
++
++find_library(RCHEEVOS_LIBRARY REQUIRED NAMES rcheevos)
++find_path(RCHEEVOS_INCLUDE rcheevos/rcheevos.h)
++
++add_library(rcheevos STATIC IMPORTED GLOBAL)
++set_target_properties(rcheevos PROPERTIES
++  IMPORTED_LOCATION ${RCHEEVOS_LIBRARY}
++  INTERFACE_INCLUDE_DIRECTORIES ${RCHEEVOS_INCLUDE}
++)
 diff --git a/src/common/CMakeLists.txt b/src/common/CMakeLists.txt
 index 9c7f5915..b3882f87 100644
 --- a/src/common/CMakeLists.txt
@@ -181,6 +220,32 @@ index 4d60f8e0..c994da0a 100644
  
  if(CPU_ARCH_X64)
    target_compile_definitions(core PUBLIC "ENABLE_RECOMPILER=1" "ENABLE_NEWREC=1" "ENABLE_MMAP_FASTMEM=1")
+diff --git a/src/core/achievements.cpp b/src/core/achievements.cpp
+index 8b81324d..1c8660d1 100644
+--- a/src/core/achievements.cpp
++++ b/src/core/achievements.cpp
+@@ -39,7 +39,7 @@
+ #include "imgui.h"
+ #include "imgui_internal.h"
+ #include "imgui_stdlib.h"
+-#include "rc_client.h"
++#include "rcheevos/rc_client.h"
+ 
+ #include <algorithm>
+ #include <atomic>
+diff --git a/src/core/achievements_private.h b/src/core/achievements_private.h
+index 0f5a9d14..f83f86eb 100644
+--- a/src/core/achievements_private.h
++++ b/src/core/achievements_private.h
+@@ -5,7 +5,7 @@
+ 
+ #include "achievements.h"
+ 
+-#include "rc_client.h"
++#include "rcheevos/rc_client.h"
+ 
+ namespace Achievements {
+ 
 diff --git a/src/core/cpu_recompiler_types.h b/src/core/cpu_recompiler_types.h
 index a58a70ab..ba4c7951 100644
 --- a/src/core/cpu_recompiler_types.h
@@ -246,6 +311,32 @@ index 35c765fa..27cecb30 100644
  
  if(ENABLE_CUBEB)
    target_sources(util PRIVATE
+diff --git a/src/util/audio_stream.cpp b/src/util/audio_stream.cpp
+index fb57ba4a..5a4abed4 100644
+--- a/src/util/audio_stream.cpp
++++ b/src/util/audio_stream.cpp
+@@ -10,7 +10,7 @@
+ #include "common/log.h"
+ #include "common/timer.h"
+ 
+-#include "SoundTouch.h"
++#include "soundtouch/SoundTouch.h"
+ 
+ #include <algorithm>
+ #include <cmath>
+diff --git a/src/util/cubeb_audio_stream.cpp b/src/util/cubeb_audio_stream.cpp
+index 3b4cc7e2..310fa60e 100644
+--- a/src/util/cubeb_audio_stream.cpp
++++ b/src/util/cubeb_audio_stream.cpp
+@@ -276,7 +276,7 @@ std::unique_ptr<AudioStream> AudioStream::CreateCubebAudioStream(u32 sample_rate
+ std::vector<std::string> AudioStream::GetCubebDriverNames()
+ {
+   std::vector<std::string> names;
+-  const char** cubeb_names = cubeb_get_backend_names();
++  static const char* cubeb_names[] = {"alsa", "pulse", nullptr};
+   for (u32 i = 0; cubeb_names[i] != nullptr; i++)
+     names.emplace_back(cubeb_names[i]);
+   return names;
 diff --git a/src/util/ini_settings_interface.h b/src/util/ini_settings_interface.h
 index 8aa178db..d42397a1 100644
 --- a/src/util/ini_settings_interface.h
