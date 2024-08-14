@@ -592,6 +592,14 @@ A \"BIOS\" ROM image is required to to start the emulator and to play games. You
 ;;   target_sources(glad PRIVATE src/glad_glx.c)
 ;; endif()
 
+(define qtmultimedia-with-plugin-path
+  (package
+   (inherit qtmultimedia)
+   (native-search-paths
+    (list (search-path-specification
+           (variable "QT_PLUGIN_PATH")
+           (files '("lib/qt6/plugins")))))))
+
 (define-public rpcs3
   (package
    (name "RPCS3")
@@ -647,57 +655,43 @@ A \"BIOS\" ROM image is required to to start the emulator and to play games. You
                                       "#include \"../glslang/Include/intermediate.h\""))))))
    (build-system cmake-build-system)
    (arguments (list
-               #:build-type "Debug"
-               #:strip-binaries? #f
-               #:configure-flags '(map (λ (c) (string-append "-D" (car c) "=" (cdr c)))
-                                       '(("USE_SYSTEM_SDL"    . "ON")
-                                         ("USE_SYSTEM_FFMPEG" . "ON")
-                                         
-                                         ;; 3rd party
-                                         ("USE_SYSTEM_FLATBUFFERS" . "ON")
-                                         ("USE_SYSTEM_PUGIXML"     . "ON")
-                                         ("USE_SYSTEM_LIBUSB"      . "ON")
-                                         ("USE_SYSTEM_XXHASH"      . "ON")
-                                         ;;USE_LIBEVDEV   ???
-                                         ("USE_SYSTEM_FAUDIO"      . "ON")
-                                         ;; ("USE_SYSTEM_WOLFSSL"     . "ON")
-                                         ;; ("USE_SYSTEM_CURL"        . "ON")
-                                         ;;built-in curl requires built-in wolfssl
-                                         ("USE_SYSTEM_ZLIB"        . "ON")))
-                #:phases
-                #~(modify-phases %standard-phases
-                                 (delete 'check))))
-   ;;(outputs '("out" "debug"))
-   (inputs (list 
-                 eudev ;;Checking for modules 'libevdev;libudev' No package 'libevdev' found
+               ;; #:build-type "Debug"
+               ;; #:strip-binaries? #f
+               #:configure-flags
+               '(map (λ (c) (string-append "-D" (car c) "=" (cdr c)))
+                     '(("USE_SYSTEM_SDL"    . "ON")
+                       ("USE_SYSTEM_FFMPEG" . "ON")
+                       
+                       ;; 3rd party
+                       ("USE_SYSTEM_FLATBUFFERS" . "ON")
+                       ("USE_SYSTEM_PUGIXML"     . "ON")
+                       ("USE_SYSTEM_LIBUSB"      . "ON")
+                       ("USE_SYSTEM_XXHASH"      . "ON")
+                       ;;USE_LIBEVDEV   ???
+                       ("USE_SYSTEM_FAUDIO"      . "ON")
+                       ;; ("USE_SYSTEM_WOLFSSL"     . "ON")
+                       ;; ("USE_SYSTEM_CURL"        . "ON")
+                       ;;built-in curl requires built-in wolfssl
+                       ("USE_SYSTEM_ZLIB"        . "ON")))
+               #:phases
+               #~(modify-phases %standard-phases
+                  (delete 'check))))
+   (inputs (list eudev    ;;Checking for modules 'libevdev;libudev' No package 'libevdev' found
                  libevdev ;;? vs eudev
-                 vulkan-validationlayers ;; vulkan might still be missing? Could NOT find Vulkan (missing: Vulkan_LIBRARY) (found version "1.3.280")
-                 vulkan-headers
+                 vulkan-validationlayers ;; `Could NOT find Vulkan (missing: Vulkan_LIBRARY) (found version "1.3.280")` ??
                  openal
                  glew 
                  qtbase
                  qtdeclarative
-                 qtmultimedia
-                 qtsvg                 
-                 ;;
-                 ;;mesa 
-                 ;;eglexternalplatform
-                 ;;freeglut
-                 ;;glu ;;based on cmakelist.txt (3dparty)
-                 ;; glad ;; ?
-                 ;;mesa
+                 qtsvg
                  libglvnd
-                 ;;doxygen?
-                 ;;glslang
                  
-                 ;;spirv-tools
-                 ;;spirv-headers
-
+                 ;;doxygen?
                  libxext
                  libxkbcommon
                  ;;jack-2
                  alsa-lib
-
+                 
                  ;;3rd party replacements
                  llvm-16 ;; They use 16.0.1
                  libusb
@@ -708,23 +702,28 @@ A \"BIOS\" ROM image is required to to start the emulator and to play games. You
                  ;;wolfssl
                  xxhash
                  pugixml
-                ;; curl
-                 faudio
-                 ))
-   (native-inputs (list pkg-config))
-   (propagated-inputs (list qtwayland egl-wayland)) ;; .ci/deploy-linux.sh hints that wayland needs the qt modules for compatibility
+                 ;; curl
+                 faudio))
+   (native-inputs (list pkg-config
+                        vulkan-headers))
+   ;; .ci/deploy-linux.sh hints that wayland needs the qt modules for compatibility
+   ;; vulkan-loader needs to be in the common path until guix#71109 `[PATCH] gnu: vulkan-tools: Wrap binaries with LD_LIBRARY_PATH.`
+   (propagated-inputs (list qtwayland
+                            qtmultimedia-with-plugin-path
+                            vulkan-loader)) 
    (synopsis "The world's first free and open-source PlayStation 3 emulator/debugger, written in C++ for Windows, Linux, macOS and FreeBSD.")
    (description synopsis)
    (home-page "rpcs3.net")
-   (license #f))) ;; todo fix license
+   (license license:gpl2)))
 
 ;; Notes
-;; - Force `QT_QPA_PLATFORM=xcb` to deal with warning: qt.qpa.plugin: Could not find the Qt platform plugin "wayland" in ""
-;; - No QtMultimedia backends found. Only QMediaDevices, QAudioDevice, QSoundEffect, QAudioSink, and QAudioSource are available.
-;;   Failed to initialize QMediaPlayer "Not available"
+;; - In wayland use `QT_QPA_PLATFORM=xcb rpcs3` otherwise `Vulkan API call failed with unrecoverable error: Out of host memory (system RAM) (VK_ERROR_OUT_OF_HOST_MEMORY)`
+;;   `qtwayland` package might not belong here. Sort it out another time.
+;; - Only works with vulkan on a graphics card, `llvmpipe` doesn't work.
 ;; - qt.glx: qglx_findConfig: Failed to finding matching FBConfig for QSurfaceFormat(version 4.3, options QFlags<QSurfaceFormat::FormatOption>(),
 ;;   depthBufferSize 0, redBufferSize 1, greenBufferSize 1, blueBufferSize 1, alphaBufferSize -1, stencilBufferSize -1, samples -1, swapBehavior
 ;;   QSurfaceFormat::SingleBuffer, swapInterval 1, colorSpace QColorSpace(), profile  QSurfaceFormat::CoreProfile)
 ;;   Could not initialize GLX
+;;   Issue with OpenGl
 
 
